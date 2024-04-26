@@ -43,12 +43,36 @@ describe('isValidFootnote()', () => {
         const actual = isValidFootnote(validLi, tree);
         expect(actual).toBe(true);
     });
+
+    it(`should return true when the list item has matching ID (with alternate pattern)
+        and is beneath an element with expected data attribute
+        and has a corresponding footnote link in the tree`, () => {
+        const validLi = h('li', { id: 'fn:3' }, [h('p', 'This LI has the expected ID format')]);
+        const tree = h('div', [
+            h('p', [h('a', { href: '#fn:3' })]),
+            h('section', { 'data-footnotes': '' }, [h('ol', [validLi])]),
+        ]);
+        const actual = isValidFootnote(validLi, tree);
+        expect(actual).toBe(true);
+    });
+
+    it(`should return true when the list item has matching ID
+        and is beneath an element with expected class name
+        and has a corresponding footnote link in the tree`, () => {
+        const validLi = h('li#user-content-fn-3', [h('p', 'This LI has the expected ID format')]);
+        const tree = h('div', [
+            h('p', [h('a', { href: '#user-content-fn-3' })]),
+            h('div', { class: 'footnotes' }, [h('ol', [validLi])]),
+        ]);
+        const actual = isValidFootnote(validLi, tree);
+        expect(actual).toBe(true);
+    });
 });
 
 // Convert to sidenote element
 const li01 = h('li#user-content-fn-3', [h('p', 'This is a footnote, soon to be an endnote.')]);
 const li02 = h('li#user-content-fn-1', [h('p', 'Some other footnote')]);
-const aside01 = h('aside#user-content-fn-3.Sidenote', [
+const aside01 = h('aside#user-content-fn-3.Sidenote', { role: 'doc-footnote' }, [
     h('p', [
         h('small', { class: 'Sidenote-small' }, [
             h('sup', { class: 'Sidenote-number' }, '5\u2009'),
@@ -56,7 +80,7 @@ const aside01 = h('aside#user-content-fn-3.Sidenote', [
         ]),
     ]),
 ]);
-const aside02 = h('aside#user-content-fn-1.Sidenote', [
+const aside02 = h('aside#user-content-fn-1.Sidenote', { role: 'doc-footnote' }, [
     h('p', [
         h('small', { class: 'Sidenote-small' }, [
             h('sup', { class: 'Sidenote-number' }, '7\u2009'),
@@ -103,6 +127,7 @@ describe('rehypeSidenotes()', () => {
           <div>
             <p>This is some text.</p>
             <p>This is some text with a footnote ref.<sup><a id="user-content-fnref-1" href="#user-content-fn-1">1</a></sup></p>
+            <p>Some more text.</p>
           </div>
           <section data-footnotes="">
             <ol>
@@ -114,7 +139,8 @@ describe('rehypeSidenotes()', () => {
           <div>
             <p>This is some text.</p>
             <p>This is some text with a footnote ref.<sup><a id="user-content-fnref-1" href="#user-content-fn-1">1</a></sup></p>
-            <aside class="Sidenote" id="user-content-fn-1"><p><small class="Sidenote-small"><sup class="Sidenote-number">1\u2009</sup>This is the footnote.</small></p></aside>
+            <aside class="Sidenote" id="user-content-fn-1" role="doc-footnote"><p><small class="Sidenote-small"><sup class="Sidenote-number">1\u2009</sup>This is the footnote.</small></p></aside>
+            <p>Some more text.</p>
           </div>
         </main>`.replace(/  +/g, ' ');
         rehype()

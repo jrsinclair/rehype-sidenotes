@@ -79,8 +79,9 @@ export const isElement = (node: ElementContent | RootContent | undefined): node 
  */
 export function isValidFootnote(el: Element, tree: Nodes) {
     const id = `${el.properties['id']}`;
-    const idValid = /fn-\d+$/.test(id);
-    const hasParent = select(`[data-footnotes] #${id}`, tree) != undefined;
+    const idValid = /fn[-\:]\d+$/.test(id);
+    const hasParent =
+        select(`[data-footnotes] [id="${id}"], .footnotes [id="${id}"]`, tree) != undefined;
     const hasRef = select(`[href="#${id}"]`, tree) != undefined;
     return idValid && hasParent && hasRef;
 }
@@ -109,7 +110,7 @@ export function convertFootnoteToSidenote(el: Element, fnNum: string) {
     firstChild.children.unshift(h('sup', { class: 'Sidenote-number' }, fnNum + '\u2009'));
     return h(
         'aside.Sidenote',
-        el.properties,
+        { ...el.properties, role: 'doc-footnote' },
         chilluns.map((child) => wrapInner(child, h('small', { class: 'Sidenote-small' }, []))),
     );
 }
