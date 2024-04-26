@@ -1,7 +1,7 @@
 import { expect, describe, it } from 'vitest';
 import { h } from 'hastscript';
-import rehypeSidenotes from './main';
-import { isValidFootnote, convertFootnoteToSidenote, findParentBlockElementOfRef } from './main';
+import sidenotes from './main';
+import { isValidFootnote, convertFootnoteToSidenote, findParentBlockElementOfRef } from './util';
 import { toHtml } from 'hast-util-to-html';
 import { rehype } from 'rehype';
 
@@ -50,12 +50,19 @@ const li01 = h('li#user-content-fn-3', [h('p', 'This is a footnote, soon to be a
 const li02 = h('li#user-content-fn-1', [h('p', 'Some other footnote')]);
 const aside01 = h('aside#user-content-fn-3.Sidenote', [
     h('p', [
-        h('sup', { class: 'Sidenote-number' }, '5\u2009'),
-        'This is a footnote, soon to be an endnote.',
+        h('small', { class: 'Sidenote-small' }, [
+            h('sup', { class: 'Sidenote-number' }, '5\u2009'),
+            'This is a footnote, soon to be an endnote.',
+        ]),
     ]),
 ]);
 const aside02 = h('aside#user-content-fn-1.Sidenote', [
-    h('p', [h('sup', { class: 'Sidenote-number' }, '7\u2009'), 'Some other footnote']),
+    h('p', [
+        h('small', { class: 'Sidenote-small' }, [
+            h('sup', { class: 'Sidenote-number' }, '7\u2009'),
+            'Some other footnote',
+        ]),
+    ]),
 ]);
 describe.each`
     input   | fnNum | expected
@@ -107,12 +114,12 @@ describe('rehypeSidenotes()', () => {
           <div>
             <p>This is some text.</p>
             <p>This is some text with a footnote ref.<sup><a id="user-content-fnref-1" href="#user-content-fn-1">1</a></sup></p>
-            <aside class="Sidenote" id="user-content-fn-1"><p><sup class="Sidenote-number">1\u2009</sup>This is the footnote.</p></aside>
+            <aside class="Sidenote" id="user-content-fn-1"><p><small class="Sidenote-small"><sup class="Sidenote-number">1\u2009</sup>This is the footnote.</small></p></aside>
           </div>
         </main>`.replace(/  +/g, ' ');
         rehype()
             .data('settings', { fragment: true, characterReferences: { useNamedReferences: true } })
-            .use(rehypeSidenotes)
+            .use(sidenotes)
             .process(input, (err, file) => {
                 if (err != undefined) throw err;
                 expect(
