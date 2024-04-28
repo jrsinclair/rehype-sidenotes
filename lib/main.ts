@@ -53,7 +53,9 @@ const transformAndShiftFootnote = maybeDo(function* transformAndShift(
 
 function transformer(tree: Root) {
     // Grab all list items below the element with data attribute footnotes
-    const listItems = selectAll('.footnotes li, [data-footnotes] li', tree);
+    // We reverse them so that if two footnotes end up in the same location, the first one ends up
+    // first.
+    const listItems = selectAll('.footnotes li, [data-footnotes] li', tree).reverse();
     listItems.forEach((el) => transformAndShiftFootnote(el, tree));
     const remainingListItems = selectAll('.footnotes li, [data-footnotes] li', tree);
     if (remainingListItems.length === 0) {

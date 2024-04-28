@@ -10,6 +10,7 @@ import {
 } from './util';
 import { fromHtml } from 'hast-util-from-html';
 import { select } from 'hast-util-select';
+import { readFile } from 'node:fs/promises';
 
 describe('isValidFootnote()', () => {
     it('should return false when the list item’s ID does not match the expected pattern', () => {
@@ -79,20 +80,24 @@ describe('isValidFootnote()', () => {
 const li01 = h('li#user-content-fn-3', [' ', h('p', 'This is a footnote, soon to be an endnote.')]);
 const li02 = h('li#user-content-fn-1', ['\n ', h('p', 'Some other footnote'), '\n']);
 const aside01 = h('aside#user-content-fn-3.Sidenote', { role: 'doc-footnote' }, [
+    '\n ',
     h('p', [
         h('small', { class: 'Sidenote-small' }, [
             h('sup', { class: 'Sidenote-number' }, '5\u2009'),
             'This is a footnote, soon to be an endnote.',
         ]),
     ]),
+    '\n ',
 ]);
 const aside02 = h('aside#user-content-fn-1.Sidenote', { role: 'doc-footnote' }, [
+    '\n ',
     h('p', [
         h('small', { class: 'Sidenote-small' }, [
             h('sup', { class: 'Sidenote-number' }, '7\u2009'),
             'Some other footnote',
         ]),
     ]),
+    '\n ',
 ]);
 describe.each`
     input   | fnNum | expected
@@ -183,7 +188,9 @@ describe('rehypeSidenotes()', () => {
           <div>
             <p>This is some text.</p>
             <p>This is some text with a footnote ref.<sup><a id="user-content-fnref-1" href="#user-content-fn-1">1</a></sup></p>
-            <aside class="Sidenote" id="user-content-fn-1" role="doc-footnote"><p><small class="Sidenote-small"><sup class="Sidenote-number">1\u2009</sup>This is the footnote.</small></p></aside>
+            <aside class="Sidenote" id="user-content-fn-1" role="doc-footnote">
+              <p><small class="Sidenote-small"><sup class="Sidenote-number">1\u2009</sup>This is the footnote.</small></p>
+            </aside>
             <p>Some more text.</p>
           </div>
         </main>`.replace(/  +/g, ' ');
@@ -235,15 +242,19 @@ describe('rehypeSidenotes()', () => {
         without in-person communication. When we’re all together in the same office, building social capital can ‘just
         happen’ for many.<sup><a href="#user-content-fn-3" id="user-content-fnref-3" data-footnote-ref="" aria-describedby="footnote-label">1</a></sup> It doesn’t take much thought. In a friendly organisation (like
         the one I work for), it may not be automatic, but it doesn’t take much effort.</p>
-        <aside class="Sidenote" id="user-content-fn-3" role="doc-footnote"><p><small class="Sidenote-small"><sup class="Sidenote-number">1 </sup>Just so I’m not misunderstood, I’m aware that there are many people who find in-person interactions
+        <aside class="Sidenote" id="user-content-fn-3" role="doc-footnote">
+          <p><small class="Sidenote-small"><sup class="Sidenote-number">1 </sup>Just so I’m not misunderstood, I’m aware that there are many people who find in-person interactions
           difficult and stressful. When I say it ‘just happens,’ I really mean ‘for most neurotypical people,
-          much of the time.’ <a href="#user-content-fnref-3" data-footnote-backref="" aria-label="Back to reference 1" class="data-footnote-backref">↩</a></small></p></aside>
+          much of the time.’ <a href="#user-content-fnref-3" data-footnote-backref="" aria-label="Back to reference 1" class="data-footnote-backref">↩</a></small></p>
+        </aside>
     <blockquote>
         <p>When we’re co-located there is a lot of accidental, incidental, and tacit communication that helps form social
             bonds. When leading remote teams, these things must be done purposefully.<sup><a href="#user-content-fn-4" id="user-content-fnref-4" data-footnote-ref="" aria-describedby="footnote-label">2</a></sup></p>
     </blockquote>
-    <aside class="Sidenote" id="user-content-fn-4" role="doc-footnote"><p><small class="Sidenote-small"><sup class="Sidenote-number">2 </sup>Wayne Turmel, ‘<a href="https://www.management-issues.com/connected/6986/building-social-capital-in-remote-teams/">Building
-          social capital in remote teams</a>,’ <em>The Connected Manager</em>, 2 December 2014. <a href="#user-content-fnref-4" data-footnote-backref="" aria-label="Back to reference 2" class="data-footnote-backref">↩</a></small></p></aside>
+    <aside class="Sidenote" id="user-content-fn-4" role="doc-footnote">
+      <p><small class="Sidenote-small"><sup class="Sidenote-number">2 </sup>Wayne Turmel, ‘<a href="https://www.management-issues.com/connected/6986/building-social-capital-in-remote-teams/">Building
+          social capital in remote teams</a>,’ <em>The Connected Manager</em>, 2 December 2014. <a href="#user-content-fnref-4" data-footnote-backref="" aria-label="Back to reference 2" class="data-footnote-backref">↩</a></small></p>
+    </aside>
     </div>`.replace(/  +/g, ' ');
         rehype()
             .data('settings', { fragment: true, characterReferences: { useNamedReferences: true } })
@@ -256,5 +267,29 @@ describe('rehypeSidenotes()', () => {
                         .replace(/\n\s*\n/g, '\n'),
                 ).toEqual(expected);
             });
+    });
+
+    it.each`
+        inputFile                     | expectedFile
+        ${'test-data/fight-new.html'} | ${'test-data/fight-new-transformed.html'}
+        ${'test-data/fight-old.html'} | ${'test-data/fight-old-transformed.html'}
+    `('should handle complete files', async ({ inputFile, expectedFile }) => {
+        const inputStr = (await readFile(__dirname + '/' + inputFile)).toString('utf-8');
+        const expectedStrRaw = (await readFile(__dirname + '/' + expectedFile)).toString('utf-8');
+        const expectedStr = String(
+            await rehype()
+                .data('settings', { characterReferences: { useNamedReferences: true } })
+                .process(expectedStrRaw),
+        )
+            .replace(/  +/g, ' ')
+            .replace(/\n\s*\n/g, '\n');
+        const vFile = await rehype()
+            .data('settings', { characterReferences: { useNamedReferences: true } })
+            .use(sidenotes)
+            .process(inputStr);
+        const actual = String(vFile)
+            .replace(/  +/g, ' ')
+            .replace(/\n\s*\n/g, '\n');
+        expect(actual).toEqual(expectedStr);
     });
 });

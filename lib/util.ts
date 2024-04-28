@@ -17,34 +17,6 @@ const LOGICAL_SECTION_ELEMENTS = ['div', 'section', 'article', 'main'];
 // Private utilities
 // ------------------------------------------------------------------------------------------------
 
-/**
- * Find Block Parent.
- *
- * Given a CSS selector that (we assume) points to an inline element, search up the tree looking for
- * a block element.
- *
- * @param selector A selector that specifies where to start looking up the tree.
- * @param tree The HAST tree we're currently working with.
- * @returns The first block element parent of the provided selector we can find.
- */
-function findBlockParent(selector: string, tree: Root | Element) {
-    const parentSelector = `*:has(> ${selector})`;
-    const candidate = select(parentSelector, tree);
-
-    // If our search found nothing, no further searches will help us.
-    if (candidate === undefined) return;
-
-    // If we found something, and it's a block element, then we've found it!
-    if (BLOCK_ELEMENTS.includes(candidate.tagName)) return candidate;
-
-    // If we found something and it's NOT a block element, but we're at the top of the tree, there's
-    // no point searching further because we can't go any higher.
-    if (candidate === tree) return tree;
-
-    // If we've reached here, we found an inline element. So we look one level further up the tree.
-    return findBlockParent(parentSelector, tree);
-}
-
 const elDepth = (el: Root | ElementContent | RootContent, currentDepth = 0): number => {
     if (el.type !== 'element' && el.type !== 'root') return currentDepth + 1;
     if (el.children.length === 0) return currentDepth + 1;
@@ -131,11 +103,11 @@ export function convertFootnoteToSidenote(footnoteEl: Element, fnNum: string) {
         : trimmedFn.children;
     const firstChild = chilluns[0] as Element;
     firstChild.children.unshift(h('sup', { class: 'Sidenote-number' }, fnNum + '\u2009'));
-    return h(
-        'aside.Sidenote',
-        { ...footnoteEl.properties, role: 'doc-footnote' },
-        chilluns.map((child) => wrapInner(child, h('small', { class: 'Sidenote-small' }, []))),
-    );
+    return h('aside.Sidenote', { ...footnoteEl.properties, role: 'doc-footnote' }, [
+        '\n ',
+        ...chilluns.map((child) => wrapInner(child, h('small', { class: 'Sidenote-small' }, []))),
+        '\n ',
+    ]);
 }
 
 export function findLogicalSectionParent(
@@ -150,7 +122,8 @@ export function findLogicalSectionParent(
 }
 
 export function findFlowParent(fnRefId: string, section: Root | Element): Element | undefined {
+    const selector = BLOCK_ELEMENTS.map((tagName) => `${tagName}:has(#${fnRefId})`).join(', ');
     return (
         section.children.filter((child): child is Element => child.type === 'element') as Element[]
-    ).find((child) => matches(`:has(#${fnRefId})`, child));
+    ).find((child) => matches(selector, child));
 }
