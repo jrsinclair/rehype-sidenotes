@@ -1,9 +1,15 @@
 import { expect, describe, it } from 'vitest';
 import { h } from 'hastscript';
 import sidenotes from './main';
-import { isValidFootnote, convertFootnoteToSidenote, findParentBlockElementOfRef } from './util';
-import { toHtml } from 'hast-util-to-html';
 import { rehype } from 'rehype';
+import {
+    isValidFootnote,
+    convertFootnoteToSidenote,
+    findFlowParent,
+    findLogicalSectionParent,
+} from './util';
+import { fromHtml } from 'hast-util-from-html';
+import { select } from 'hast-util-select';
 
 describe('isValidFootnote()', () => {
     it('should return false when the list item’s ID does not match the expected pattern', () => {
@@ -70,8 +76,8 @@ describe('isValidFootnote()', () => {
 });
 
 // Convert to sidenote element
-const li01 = h('li#user-content-fn-3', [h('p', 'This is a footnote, soon to be an endnote.')]);
-const li02 = h('li#user-content-fn-1', [h('p', 'Some other footnote')]);
+const li01 = h('li#user-content-fn-3', [' ', h('p', 'This is a footnote, soon to be an endnote.')]);
+const li02 = h('li#user-content-fn-1', ['\n ', h('p', 'Some other footnote'), '\n']);
 const aside01 = h('aside#user-content-fn-3.Sidenote', { role: 'doc-footnote' }, [
     h('p', [
         h('small', { class: 'Sidenote-small' }, [
@@ -98,26 +104,64 @@ describe.each`
     });
 });
 
-// Find parent block element of corresponding reference
-const fn01 = li01;
-const fn02 = li02;
-const ref01 = h('a#user-content-fnref-3', { href: `#${li01.properties.id}` }, '5');
-const ref02 = h('a#user-content-fnref-1', { href: `#${li02.properties.id}` }, '7');
-const expected01 = h('p', [h('span', ['some random text', h('sup', [ref01])])]);
-const expected02 = h('p', ['some random text', h('sup', [ref02])]);
-const tree01 = h('div', [expected01, h('section', { 'data-footnotes': '' }, [h('ol', [fn01])])]);
-const tree02 = h('blockquote', [
-    expected02,
-    h('section', { 'data-footnotes': '' }, [h('ol', [fn01])]),
-]);
+const tree01 = `<main>
+  <div id="the-container">
+    <p>This is some text.</p>
+    <p id="the-parent">This is some text with a footnote ref.<sup><a id="user-content-fnref-1" href="#user-content-fn-1">1</a></sup></p>
+    <p>Some more text.</p>
+  </div>
+  <section data-footnotes="">
+    <ol>
+      <li id="user-content-fn-1"><p>This is the footnote.</p></li>
+    </ol>
+  </section>
+</main>`;
+const tree02 = `<div class="ArticleBody-inner" id="article-body">
+<p id="p-1">As a result, I think it’s important we talk about <em>Social Capital</em>. And in particular, how it decays over time
+  without in-person communication. When we’re all together in the same office, building social capital can ‘just
+  happen’ for many.<sup><a href="#user-content-fn-3" id="user-content-fnref-3" data-footnote-ref=""
+      aria-describedby="footnote-label">1</a></sup> It doesn’t take much thought. In a friendly organisation (like
+  the one I work for), it may not be automatic, but it doesn’t take much effort.</p>
+<blockquote id="blockquote-1">
+  <p id="p-2">When we’re co-located there is a lot of accidental, incidental, and tacit communication that helps form social
+    bonds. When leading remote teams, these things must be done purposefully.<sup><a href="#user-content-fn-4"
+      id="user-content-fnref-4" data-footnote-ref="" aria-describedby="footnote-label">2</a></sup></p>
+</blockquote>
+<section data-footnotes="" class="footnotes">
+  <h2 class="sr-only" id="footnote-label">Footnotes</h2>
+  <ol>
+    <li id="user-content-fn-3">
+      <p>Just so I’m not misunderstood, I’m aware that there are many people who find in-person interactions
+        difficult and stressful. When I say it ‘just happens,’ I really mean ‘for most neurotypical people,
+        much of the time.’ <a href="#user-content-fnref-3" data-footnote-backref="" aria-label="Back to reference 1" class="data-footnote-backref">↩</a></p>
+    </li>
+    <li id="user-content-fn-4">
+      <p>Wayne Turmel, ‘<a
+          href="https://www.management-issues.com/connected/6986/building-social-capital-in-remote-teams/">Building
+          social capital in remote teams</a>,’ <em>The Connected Manager</em>, 2 December 2014. <a
+          href="#user-content-fnref-4" data-footnote-backref="" aria-label="Back to reference 2"
+          class="data-footnote-backref">↩</a></p>
+    </li>
+  </ol>
+</section>
+</div>`;
+
 describe.each`
-    footnote | tree      | expected
-    ${fn01}  | ${tree01} | ${expected01}
-    ${fn02}  | ${tree02} | ${expected02}
-`('findParentBlockElementOfRef()', ({ footnote, tree, expected }) => {
-    it('should find the parent block element of the corresponding reference', () => {
-        const actual = findParentBlockElementOfRef(footnote, tree) ?? [];
-        expect(toHtml(actual)).toBe(toHtml(expected));
+    treeStr   | fnRefId                   | expectedContainerId | expectedParentId
+    ${tree01} | ${'user-content-fnref-1'} | ${'the-container'}  | ${'the-parent'}
+    ${tree02} | ${'user-content-fnref-3'} | ${'article-body'}   | ${'p-1'}
+    ${tree02} | ${'user-content-fnref-4'} | ${'article-body'}   | ${'blockquote-1'}
+`('findSectionAndParent()', ({ treeStr, fnRefId, expectedContainerId, expectedParentId }) => {
+    const tree = fromHtml(treeStr, { fragment: true });
+    const fnRef = select(`#${fnRefId}`, tree);
+    const expectedContainer = select(`#${expectedContainerId}`, tree);
+    const expectedParent = select(`#${expectedParentId}`, tree);
+    if (!fnRef) throw new Error('Could not find footnote');
+    if (!expectedContainer) throw new Error('Could not find the container');
+    if (!expectedParent) throw new Error('Could not find parent block element');
+    it(`should return ${expectedContainer.tagName}#${expectedContainerId} section and ${expectedParent.tagName}#${expectedParentId} parent`, () => {
+        expect(findLogicalSectionParent(fnRefId, tree)).toEqual(expectedContainer);
+        expect(findFlowParent(fnRefId, expectedContainer)).toEqual(expectedParent);
     });
 });
 
@@ -143,6 +187,64 @@ describe('rehypeSidenotes()', () => {
             <p>Some more text.</p>
           </div>
         </main>`.replace(/  +/g, ' ');
+        rehype()
+            .data('settings', { fragment: true, characterReferences: { useNamedReferences: true } })
+            .use(sidenotes)
+            .process(input, (err, file) => {
+                if (err != undefined) throw err;
+                expect(
+                    String(file)
+                        .replace(/  +/g, ' ')
+                        .replace(/\n\s*\n/g, '\n'),
+                ).toEqual(expected);
+            });
+    });
+
+    it('should handle the format used by jrsinclair.com', () => {
+        const input = `<div class="ArticleBody-inner">
+        <p>As a result, I think it’s important we talk about <em>Social Capital</em>. And in particular, how it decays over time
+          without in-person communication. When we’re all together in the same office, building social capital can ‘just
+          happen’ for many.<sup><a href="#user-content-fn-3" id="user-content-fnref-3" data-footnote-ref=""
+              aria-describedby="footnote-label">1</a></sup> It doesn’t take much thought. In a friendly organisation (like
+          the one I work for), it may not be automatic, but it doesn’t take much effort.</p>
+        <blockquote>
+          <p>When we’re co-located there is a lot of accidental, incidental, and tacit communication that helps form social
+            bonds. When leading remote teams, these things must be done purposefully.<sup><a href="#user-content-fn-4"
+              id="user-content-fnref-4" data-footnote-ref="" aria-describedby="footnote-label">2</a></sup></p>
+        </blockquote>
+        <section data-footnotes="" class="footnotes">
+          <h2 class="sr-only" id="footnote-label">Footnotes</h2>
+          <ol>
+            <li id="user-content-fn-3">
+              <p>Just so I’m not misunderstood, I’m aware that there are many people who find in-person interactions
+                difficult and stressful. When I say it ‘just happens,’ I really mean ‘for most neurotypical people,
+                much of the time.’ <a href="#user-content-fnref-3" data-footnote-backref="" aria-label="Back to reference 1" class="data-footnote-backref">↩</a></p>
+            </li>
+            <li id="user-content-fn-4">
+              <p>Wayne Turmel, ‘<a
+                  href="https://www.management-issues.com/connected/6986/building-social-capital-in-remote-teams/">Building
+                  social capital in remote teams</a>,’ <em>The Connected Manager</em>, 2 December 2014. <a
+                  href="#user-content-fnref-4" data-footnote-backref="" aria-label="Back to reference 2"
+                  class="data-footnote-backref">↩</a></p>
+            </li>
+          </ol>
+        </section>
+      </div>`.replace(/  +/g, ' ');
+        const expected = `<div class="ArticleBody-inner">
+        <p>As a result, I think it’s important we talk about <em>Social Capital</em>. And in particular, how it decays over time
+        without in-person communication. When we’re all together in the same office, building social capital can ‘just
+        happen’ for many.<sup><a href="#user-content-fn-3" id="user-content-fnref-3" data-footnote-ref="" aria-describedby="footnote-label">1</a></sup> It doesn’t take much thought. In a friendly organisation (like
+        the one I work for), it may not be automatic, but it doesn’t take much effort.</p>
+        <aside class="Sidenote" id="user-content-fn-3" role="doc-footnote"><p><small class="Sidenote-small"><sup class="Sidenote-number">1 </sup>Just so I’m not misunderstood, I’m aware that there are many people who find in-person interactions
+          difficult and stressful. When I say it ‘just happens,’ I really mean ‘for most neurotypical people,
+          much of the time.’ <a href="#user-content-fnref-3" data-footnote-backref="" aria-label="Back to reference 1" class="data-footnote-backref">↩</a></small></p></aside>
+    <blockquote>
+        <p>When we’re co-located there is a lot of accidental, incidental, and tacit communication that helps form social
+            bonds. When leading remote teams, these things must be done purposefully.<sup><a href="#user-content-fn-4" id="user-content-fnref-4" data-footnote-ref="" aria-describedby="footnote-label">2</a></sup></p>
+    </blockquote>
+    <aside class="Sidenote" id="user-content-fn-4" role="doc-footnote"><p><small class="Sidenote-small"><sup class="Sidenote-number">2 </sup>Wayne Turmel, ‘<a href="https://www.management-issues.com/connected/6986/building-social-capital-in-remote-teams/">Building
+          social capital in remote teams</a>,’ <em>The Connected Manager</em>, 2 December 2014. <a href="#user-content-fnref-4" data-footnote-backref="" aria-label="Back to reference 2" class="data-footnote-backref">↩</a></small></p></aside>
+    </div>`.replace(/  +/g, ' ');
         rehype()
             .data('settings', { fragment: true, characterReferences: { useNamedReferences: true } })
             .use(sidenotes)

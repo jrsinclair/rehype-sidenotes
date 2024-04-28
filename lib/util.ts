@@ -1,4 +1,4 @@
-import { select } from 'hast-util-select';
+import { matches, select, selectAll } from 'hast-util-select';
 import type { Element, Nodes, Root, ElementContent, RootContent } from 'hast';
 import { h } from 'hastscript';
 
@@ -10,6 +10,9 @@ const BLOCK_ELEMENTS =
     `address,article,aside,blockquote,canvas,dd,div,dl,dt,fieldset,figcaption,figure,footer,form,h1,h2,h3,h4,h5,h6,header,hgroup,hr,li,main,nav,noscript,ol,output,p,pre,section,table,tfoot,ul,video`.split(
         ',',
     );
+
+const LOGICAL_SECTION_ELEMENTS = ['div', 'section', 'article', 'main'];
+
 //
 // Private utilities
 // ------------------------------------------------------------------------------------------------
@@ -41,6 +44,16 @@ function findBlockParent(selector: string, tree: Root | Element) {
     // If we've reached here, we found an inline element. So we look one level further up the tree.
     return findBlockParent(parentSelector, tree);
 }
+
+const elDepth = (el: Root | ElementContent | RootContent, currentDepth = 0): number => {
+    if (el.type !== 'element' && el.type !== 'root') return currentDepth + 1;
+    if (el.children.length === 0) return currentDepth + 1;
+    return Math.max(...el.children.map((child) => elDepth(child, currentDepth + 1)));
+};
+
+const depthSortHelper = (a: Element, b: Element) => {
+    return elDepth(a) - elDepth(b);
+};
 
 //
 // Exported functions
@@ -93,40 +106,51 @@ function wrapInner(toBeWrapped: ElementContent, wrapper: Element) {
     ]);
 }
 
+function removeStartAndEndWhitespace(el: Element) {
+    const newChildren = el.children.filter((child, idx) => {
+        if (child.type !== 'text') return true;
+        if (idx != 0 && idx != el.children.length - 1) return true;
+        return !child.value.match(/^\s+$/);
+    });
+    return h(el.tagName, el.properties, newChildren);
+}
+
 /**
  * Convert Footnote to Sidenote.
  *
  * Given a footnote element, create a new sidenote element.
  *
- * @param el The footnote element to convert to a sidenote.
+ * @param footnoteEl The footnote element to convert to a sidenote.
  * @param fnNum The number of the footnote.
  * @returns A new HAST element.
  */
-export function convertFootnoteToSidenote(el: Element, fnNum: string) {
-    const chilluns = !isElement(el.children[0])
-        ? ([h('p')] as ElementContent[]).concat(el.children)
-        : el.children;
+export function convertFootnoteToSidenote(footnoteEl: Element, fnNum: string) {
+    const trimmedFn = removeStartAndEndWhitespace(footnoteEl);
+    const chilluns = !isElement(trimmedFn.children[0])
+        ? ([h('p')] as ElementContent[]).concat(trimmedFn.children)
+        : trimmedFn.children;
     const firstChild = chilluns[0] as Element;
     firstChild.children.unshift(h('sup', { class: 'Sidenote-number' }, fnNum + '\u2009'));
     return h(
         'aside.Sidenote',
-        { ...el.properties, role: 'doc-footnote' },
+        { ...footnoteEl.properties, role: 'doc-footnote' },
         chilluns.map((child) => wrapInner(child, h('small', { class: 'Sidenote-small' }, []))),
     );
 }
 
-/**
- * Find Parent Block Element of Reference.
- *
- * Given a footnote element, find the reference that points to it. Then go up the
- * tree until we find a block element.
- *
- * @param fn The footnote element to look up.
- * @param tree The HAST tree we're currently working in.
- * @returns The parent element of the reference that points to the given footnote.
- */
-export function findParentBlockElementOfRef(fn: Element, tree: Root | Element) {
-    const fnLink = findRef(fn, tree);
-    const fnLinkId = fnLink?.properties.id;
-    return findBlockParent(`#${fnLinkId}`, tree);
+export function findLogicalSectionParent(
+    fnRefId: string,
+    tree: Root | Element,
+): Element | undefined {
+    const sectionCandidateSelector = LOGICAL_SECTION_ELEMENTS.map(
+        (tagName) => `${tagName}:has(#${fnRefId})`,
+    ).join(', ');
+    const sectionCandidates = selectAll(sectionCandidateSelector, tree).sort(depthSortHelper);
+    return sectionCandidates[0];
+}
+
+export function findFlowParent(fnRefId: string, section: Root | Element): Element | undefined {
+    return (
+        section.children.filter((child): child is Element => child.type === 'element') as Element[]
+    ).find((child) => matches(`:has(#${fnRefId})`, child));
 }
