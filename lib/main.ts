@@ -1,5 +1,6 @@
 import type { Element, ElementContent, Root } from 'hast';
 import { select, selectAll } from 'hast-util-select';
+import { toHtml } from 'hast-util-to-html';
 import { maybeDo } from './maybe';
 import {
     isValidFootnote,
@@ -38,7 +39,11 @@ const transformAndShiftFootnote = maybeDo(function* transformAndShift(
     tree: Root,
 ): Generator<Element | Root | undefined, void, Element> {
     // Gather the data we need, but bail if anything returns undefined
-    if (!isValidFootnote(el, tree)) return;
+    console.log('Transforming footnote: ', toHtml(el));
+    if (!isValidFootnote(el, tree)) {
+        console.warn('That wasn’t a valid footnote');
+        return;
+    }
     const footnoteReference = yield findRef(el, tree);
     const fnRefId = String(footnoteReference.properties.id);
     const sidenote = yield convertFootnoteToSidenote(el, extractText(footnoteReference));
@@ -61,6 +66,8 @@ function transformer(tree: Root) {
     if (remainingListItems.length === 0) {
         const fnSection = select('.footnotes, [data-footnotes]', tree);
         if (fnSection) removeEl(fnSection, tree);
+    } else {
+        console.warn('Some footnotes were not removed as they still remain in the DOM');
     }
     return tree;
 }

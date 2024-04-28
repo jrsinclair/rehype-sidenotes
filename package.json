@@ -29,6 +29,7 @@
   "license": "MIT",
   "dependencies": {
     "hast-util-select": "^6.0.2",
+    "hast-util-to-html": "^9.0.1",
     "hastscript": "^9.0.0"
   },
   "directories": {
