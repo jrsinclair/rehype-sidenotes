@@ -9,6 +9,7 @@ import {
     findFlowParent,
     isElement,
     findRef,
+    getText,
 } from './util';
 
 function findParentOfEl(el: ElementContent, tree: Root | Element): Element | Root | undefined {
@@ -21,10 +22,6 @@ function findParentOfEl(el: ElementContent, tree: Root | Element): Element | Roo
     }
     return undefined;
 }
-
-const extractText = (el: Element): string => {
-    return el.children.map((child) => (child.type === 'text' ? child.value : '')).join('');
-};
 
 function removeEl(el: Element, tree: Root) {
     const parent = findParentOfEl(el, tree);
@@ -45,14 +42,19 @@ const transformAndShiftFootnote = maybeDo(function* transformAndShift(
         return;
     }
     const footnoteReference = yield findRef(el, tree);
+    console.log('Footnote reference:', toHtml(footnoteReference));
     const fnRefId = String(footnoteReference.properties.id);
-    const sidenote = yield convertFootnoteToSidenote(el, extractText(footnoteReference));
+    const sidenote = yield convertFootnoteToSidenote(el, getText(footnoteReference));
+    console.log('Sidenote:', toHtml(sidenote));
     const logicalSection = yield findLogicalSectionParent(fnRefId, tree);
+    console.log('Found logical section');
     const parent = yield findFlowParent(fnRefId, logicalSection);
+    console.log('Found immediate parent');
     const idx = logicalSection.children.indexOf(parent);
 
     // Run the effects
     logicalSection.children.splice(idx + 1, 0, { type: 'text', value: '\n ' }, sidenote);
+    console.log('Removing original footnote');
     removeEl(el, tree);
 });
 

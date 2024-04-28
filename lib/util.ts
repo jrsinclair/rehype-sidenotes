@@ -42,7 +42,13 @@ const depthSortHelper = (a: Element, b: Element) => {
  */
 export const findRef = (fn: Element, tree: Root | Element) => {
     const fnId = `${fn.properties.id}`;
-    return select(`[href="#${fnId}"]`, tree);
+    const ret = select(`[href="#${fnId}"]`, tree);
+    if (ret === undefined) {
+        console.warn(
+            `Failed to find matching footnote reference for #${fnId} using selector [href="#${fnId}"]`,
+        );
+    }
+    return ret;
 };
 
 /**
@@ -115,15 +121,28 @@ export function findLogicalSectionParent(
     tree: Root | Element,
 ): Element | undefined {
     const sectionCandidateSelector = LOGICAL_SECTION_ELEMENTS.map(
-        (tagName) => `${tagName}:has(#${fnRefId})`,
+        (tagName) => `${tagName}:has([id="${fnRefId}"])`,
     ).join(', ');
     const sectionCandidates = selectAll(sectionCandidateSelector, tree).sort(depthSortHelper);
+    if (sectionCandidates.length === 0) {
+        console.warn(
+            'Failed to find logical section parent with selector:\n' + sectionCandidateSelector,
+        );
+    }
     return sectionCandidates[0];
 }
 
 export function findFlowParent(fnRefId: string, section: Root | Element): Element | undefined {
-    const selector = BLOCK_ELEMENTS.map((tagName) => `${tagName}:has(#${fnRefId})`).join(', ');
+    const selector = BLOCK_ELEMENTS.map((tagName) => `${tagName}:has([id="${fnRefId}"])`).join(
+        ', ',
+    );
     return (
         section.children.filter((child): child is Element => child.type === 'element') as Element[]
     ).find((child) => matches(selector, child));
 }
+
+export const getText = (el: ElementContent): string => {
+    if (el.type === 'text') return el.value;
+    if (el.type === 'comment') return '';
+    return el.children.map(getText).join('');
+};

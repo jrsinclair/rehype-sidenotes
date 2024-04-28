@@ -2,7 +2,7 @@
   "name": "@jrsinclair/rehype-sidenotes",
   "description": "Takes HTML source containing GFM-style footnotes and converts them to sidenotes inlined into the page source.",
   "private": false,
-  "version": "0.0.3",
+  "version": "0.0.4",
   "author": "James Sinclair <jrsinclair@gmail.com>",
   "type": "module",
   "scripts": {
