@@ -4,6 +4,16 @@ This plugin takes <abbr title="Github Flavoured Markdown">GFM</abbr> or Multimar
 footnotes and converts them into sidenotes. That is, it places them inline with the document
 content. This way (if you choose) you can float them into a margin.
 
+Go from boring old footnote lists at the bottom of your page like this:
+
+![Boring footnote list](public/boring-old-footnote-list.png)
+
+To exciting inline sidenotes like this:
+
+![Exciting sidenote rendered inline on a small screen](public/sidenotes-on-mobile.png)
+
+![Exciting sidenote rendered to the right on a wider screen](public/sidenotes-on-tablet.png)
+
 ## Installation
 
 ```
