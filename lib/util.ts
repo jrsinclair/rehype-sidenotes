@@ -11,21 +11,102 @@ const BLOCK_ELEMENTS =
         ',',
     );
 
-const LOGICAL_SECTION_ELEMENTS = ['div', 'section', 'article', 'main'];
+const LOGICAL_SECTION_ELEMENTS = ['div', 'section', 'article', 'main'] as const;
 
 //
 // Private utilities
 // ------------------------------------------------------------------------------------------------
 
+/**
+ * Element depth.
+ *
+ * Calculate how deeply an element's children are nested.
+ *
+ * @param el An element to calculate depth for.
+ * @param currentDepth Number used to keep track of how far we've already traversed.
+ * @returns The depth of children below the current element.
+ */
 const elDepth = (el: Root | ElementContent | RootContent, currentDepth = 0): number => {
     if (el.type !== 'element' && el.type !== 'root') return currentDepth + 1;
     if (el.children.length === 0) return currentDepth + 1;
     return Math.max(...el.children.map((child) => elDepth(child, currentDepth + 1)));
 };
 
+/**
+ * Depth sort helper.
+ *
+ * A utility for sorting elements by how deep the tree below them goes.
+ *
+ * @param a First element to compare.
+ * @param b Second element to compare.
+ * @returns A comparison between the two elements.
+ */
 const depthSortHelper = (a: Element, b: Element) => {
     return elDepth(a) - elDepth(b);
 };
+
+/**
+ * Is the given node an element?
+ *
+ * @param node The node to test.
+ * @returns True if the given node is an element.
+ */
+const isElement = (node: ElementContent | RootContent | undefined): node is Element =>
+    node != undefined && node.type === 'element';
+
+/**
+ * Wrap Inner.
+ *
+ * Given an inner element and a wrapper-specification, wrap the children of the inner element with
+ * a new element as specified.
+ * @param toBeWrapped An element to be wrapped with the wrapper element.
+ * @param wrapper Specification for an element to be wrapped around the inner element. Its children
+ *                will be ignored.
+ * @returns A new element that is like the inner element, but with its children wrapped according
+ *          to the wrapper-specification.
+ */
+function wrapInner(toBeWrapped: ElementContent, wrapper: Element) {
+    if (toBeWrapped.type !== 'element') return toBeWrapped;
+    return h(toBeWrapped.tagName, toBeWrapped.properties, [
+        h(wrapper.tagName, wrapper.properties, [...toBeWrapped.children]),
+    ]);
+}
+
+/**
+ * Remove start and end whitespace from an element.
+ *
+ * @param el An element to trim whitespace from.
+ * @returns A new element with whitespace trimmed.
+ */
+function removeStartAndEndWhitespace(el: Element) {
+    // Filtering isn't particularly efficient, but it gets the job done.
+    const newChildren = el.children.filter((child, idx) => {
+        if (child.type !== 'text') return true;
+        if (idx != 0 && idx != el.children.length - 1) return true;
+        return !child.value.match(/^\s+$/);
+    });
+    return h(el.tagName, el.properties, newChildren);
+}
+
+/**
+ * Find parent of element.
+ *
+ * Does a depth-first recursive search of the tree to find the parent of the given element.
+ *
+ * @param el The element to find the parent of.
+ * @param tree The tree to search for the parent in (el must be a descendant of this root element).
+ * @returns Either the parent of the element, or undefined.
+ */
+function findParentOfEl(el: ElementContent, tree: Root | Element): Element | Root | undefined {
+    if (tree.children.includes(el)) return tree;
+    let foundParent = undefined;
+    const childrenWithChildren = tree.children.filter(isElement) as Element[];
+    for (const child of childrenWithChildren) {
+        foundParent = findParentOfEl(el, child);
+        if (foundParent !== undefined) return foundParent;
+    }
+    return undefined;
+}
 
 //
 // Exported functions
@@ -52,15 +133,6 @@ export const findRef = (fn: Element, tree: Root | Element) => {
 };
 
 /**
- * Is the given node an element?
- *
- * @param node The node to test.
- * @returns True if the given node is an element.
- */
-export const isElement = (node: ElementContent | RootContent | undefined): node is Element =>
-    node != undefined && node.type === 'element';
-
-/**
  * Is this a valid footnote element?
  *
  * @param el The HAST element to test
@@ -75,22 +147,6 @@ export function isValidFootnote(el: Element, tree: Nodes) {
         select(`[data-footnotes] [id="${id}"], .footnotes [id="${id}"]`, tree) != undefined;
     const hasRef = select(`[href="#${id}"]`, tree) != undefined;
     return idValid && hasParent && hasRef;
-}
-
-function wrapInner(toBeWrapped: ElementContent, wrapper: Element) {
-    if (toBeWrapped.type !== 'element') return toBeWrapped;
-    return h(toBeWrapped.tagName, toBeWrapped.properties, [
-        h(wrapper.tagName, wrapper.properties, [...toBeWrapped.children]),
-    ]);
-}
-
-function removeStartAndEndWhitespace(el: Element) {
-    const newChildren = el.children.filter((child, idx) => {
-        if (child.type !== 'text') return true;
-        if (idx != 0 && idx != el.children.length - 1) return true;
-        return !child.value.match(/^\s+$/);
-    });
-    return h(el.tagName, el.properties, newChildren);
 }
 
 /**
@@ -116,33 +172,83 @@ export function convertFootnoteToSidenote(footnoteEl: Element, fnNum: string) {
     ]);
 }
 
+/**
+ * Find logical section parent.
+ *
+ * Given the ID of an element, find the closest ancestor element that is a logical section. Here,
+ * by 'logical section', we mean a div, section, article or main element. If we can't find one of
+ * those, we will return the root of the tree.
+ *
+ * We use this to determine where to insert a footnote in the flow of an article or page.
+ *
+ * @param idOfEl The ID of the element to locate the logical section parent for.
+ * @param tree The tree to search for the parent in.
+ * @returns The closest anscestor div, section, article, or main element for the element with the
+ *          given ID.
+ */
 export function findLogicalSectionParent(
-    fnRefId: string,
+    idOfEl: string,
     tree: Root | Element,
-): Element | undefined {
+): Element | Root | undefined {
     const sectionCandidateSelector = LOGICAL_SECTION_ELEMENTS.map(
-        (tagName) => `${tagName}:has([id="${fnRefId}"])`,
+        (tagName) => `${tagName}:has([id="${idOfEl}"])`,
     ).join(', ');
     const sectionCandidates = selectAll(sectionCandidateSelector, tree).sort(depthSortHelper);
+    if (sectionCandidates.length === 0 && tree.type === 'root') return tree;
     if (sectionCandidates.length === 0) {
         console.warn(
-            'Failed to find logical section parent with selector:\n' + sectionCandidateSelector,
+            `Failed to find logical section parent with selector: ${sectionCandidateSelector}`,
         );
     }
     return sectionCandidates[0];
 }
 
-export function findFlowParent(fnRefId: string, section: Root | Element): Element | undefined {
-    const selector = BLOCK_ELEMENTS.map((tagName) => `${tagName}:has([id="${fnRefId}"])`).join(
-        ', ',
+/**
+ * Find flow parent.
+ *
+ * Given the ID of an element, find an element immediately below `section` that contains the
+ * given ID element.
+ *
+ * We use this to determine where to insert a footnote in the flow of an article or page.
+ *
+ * @param idOfEl ID of the element to find an ancestor for within the section.
+ * @param section The section to search.
+ * @returns The element directly below `section` that contains the element with ID `idOfEl`.
+ */
+export function findFlowParent(idOfEl: string, section: Root | Element): Element | undefined {
+    const selector = BLOCK_ELEMENTS.map((tag) => `${tag}:has([id="${idOfEl}"])`).join(', ');
+    return (section.children.filter(isElement) as Element[]).find((child) =>
+        matches(selector, child),
     );
-    return (
-        section.children.filter((child): child is Element => child.type === 'element') as Element[]
-    ).find((child) => matches(selector, child));
 }
 
+/**
+ * Get Text.
+ *
+ * Extracts all the text nodes below the given element and concatenates them.
+ *
+ * @param el The element to extract text from.
+ * @returns The concatenation of all the text nodes below the current element.
+ */
 export const getText = (el: ElementContent): string => {
     if (el.type === 'text') return el.value;
     if (el.type === 'comment') return '';
     return el.children.map(getText).join('');
 };
+
+/**
+ * Remove Element.
+ *
+ * Removes an element from the tree.
+ *
+ * @param el An element to remove from the tree.
+ * @param tree The tree to remove an element from.
+ * @returns The removed element or undefined.
+ */
+export function removeEl(el: Element, tree: Root) {
+    const parent = findParentOfEl(el, tree);
+    if (!parent) return;
+    const idx = parent?.children.indexOf(el);
+    if (idx === -1) return;
+    return parent.children.splice(idx, 1)[0] as Element;
+}
