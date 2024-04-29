@@ -1,8 +1,8 @@
 # Rehype sidenotes
 
-This plugin takes <abbr title="Github Flavoured Markdown">GFM</abbr>-style footnotes and converts
-them into sidenotes. That is, it places them inline with the document content. This way (if you
-choose) you can float them into a margin.
+This plugin takes <abbr title="Github Flavoured Markdown">GFM</abbr> or Multimarkdown-style
+footnotes and converts them into sidenotes. That is, it places them inline with the document
+content. This way (if you choose) you can float them into a margin.
 
 ## Installation
 
