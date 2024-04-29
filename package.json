@@ -39,5 +39,13 @@
     "sidenote",
     "footnote",
     "markdown"
-  ]
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jrsinclair/rehype-sidenotes.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jrsinclair/rehype-sidenotes/issues"
+  },
+  "homepage": "https://github.com/jrsinclair/rehype-sidenotes#readme"
 }
